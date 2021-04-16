@@ -1,0 +1,122 @@
+[background big]#Отчет по лабораторной работе (датчик температуры)#
+
+. Задание
++
+Измерить температуру микроконтроллера с помощью встроенного датчика температуры
++
+
++
+. Выполнение задания:
++
+Первым делом был подключен внешний источник питания HSE. Затем подключили АЦП к источнику тактирования.
++
+Для Использования датчика температуры необходимо:
++
+Выбрать входной канал для STM32F411RE это каналы ADC1_IN16 и ADC1_IN18)
++
+Включить датчик температуры, установив бит TSVREFE, в регистре ADC_Common_CCR.
++
+Настроить АЦП
++
+Установить разрядность в регистре ADC_CR1. Установим требуемое значение 12 бит.
++
+Установить режим одиночного преобразования.
++
+Установить количество измерений 1 в регистре ADC1_SQR1, используя для этого бит L.
++
+Выбрать канал для первого преобразования. Выберем 18 канал.
++
+Включить АЦП с помощью установки бита ADON.
++
+Запустить АЦП на преобразование с помощью установки бита SWSTART.
++
+Дождаться готовности бита EOC.
++
+Считать результирующие данные Vsense в регистре данных АЦП. Для получения значений температуры в градусах необходимо рассчитать данные с АЦП по определенной формуле t={(Vsense-V25)/Avg_Slope}+25. Значения V25 и Avg_Slop выбираются в соответствии с документацией на микроконтроллер. В нашем случае эти значения равны 0,76 В и 0,0025 В/0С соответственно. Таким образом приведенная выше формула будет преобразована как t={(Мыутыу-0,76)/0,0025}+25.
++
+Данные полученные датчиком отображены в терминале I/O.
++
+. Код программы
++
+[.Source,cpp]
+----
+ #include "adc1registers.hpp" //for ADC1
+ #include "adccommonregisters.hpp" //for ADCCommon
+ #include "gpioaregisters.hpp"  //for Gpioa
+ #include "gpiocregisters.hpp"  //for Gpioc
+ #include "rccregisters.hpp"    //for RCC
+ #include "usart2registers.hpp" //for USART2
+ #include "tim2registers.hpp"   //for TIM2
+ #include <iostream> // for std::cout
+ extern "C"
+ {
+ int __low_level_init(void)
+ {
+ // Configure Advanced Peripheral Bus 1 (APB1).
+ RCC::APB2ENR::ADC1EN::Enable::Set();
+ // Set port GPIOA0 as analog input.
+    GPIOA::MODER::MODER0::Analog::Set();
+    // Single Conversion means that you need to measure only once.
+    // ADC could be triggered by any of TIM1, TIM2, TIM3, TIM4 or TIM5 timer,
+    // but in this application we are not going to need it because there is
+    // only one conversion.
+    // Single conversion mode is started with the CONT bit at 0 by
+    // setting the SWSTART bit in the ADC_CR2 register (for a regular channel only).
+  ADC1::CR2::CONT::Value0::Set();
+    // EOCS is an end of conversion.
+    // Set regular channel sequence length equled to 1
+    // in ADC regular sequence register 1.
+    ADC1::SQR1::L::Value0::Set(); // Value0 or Value1 (0x0000 for one conversion)?
+    // Assign 1st conversion in regular sequence in ADC_SQR3 register.
+    RCC::CR::HSION::Off::Set();
+    RCC::APB2ENR::ADC1EN::Enable::Set();
+    ADC_Common::CCR::TSVREFE::Value1::Set();
+    ADC1::CR1::RES::Bits12::Set();
+    ADC1::CR2::EOCS::afterEachConvertion::Set();
+    ADC1::SQR1::L::Value0::Set();
+    ADC1::SQR3::SQ1::Value18::Set();
+    ADC1::SMPR1::SMP18::Set(4U);
+    ADC1::CR2::ADON::Enable::Set();
+                                         // Activate ADC1.
+                                         // Wait until conversion is complete.
+    return 1;
+  }
+}
+ int main()
+{
+float TS_CALl = static_cast<float> (*reinterpret_cast<uint16_t*>(0x1FFF7A2C));
+std::cout << TS_CALl << std::endl;
+    float TS_CAL2 = static_cast<float> (*reinterpret_cast<uint16_t*>(0x1FFF7A2E));
+    std::cout << TS_CAL2 << std::endl;
+      //float Vref = static_cast<float> (*reinterpret_cast<uint16_t*>(0x1FFF7A2A));
+     // std::cout << TS_CALl << std::endl;
+uint16_t TS_CAL1 = *reinterpret_cast < uint16_t* >(0x1FFF7A2C);
+//std::cout << TS_CAL1 << std::endl;
+for (;;)
+{
+ADC1::CR2::SWSTART::Value1::Set();
+while(!ADC1::SR::EOC::Value1::IsSet());
+{
+}
+uint32_t ADC_DATA = ADC1::DR::DATA::Get();
+    float b = (ADC1::DR::DATA::Get())*(3.3/4096);
+   // float b = ((-30 + 110)*(ADC_DATA - TS_CAL1) + (-TS_CAL1*30 + TS_CAL2*30) /(TS_CAL2 - TS_CAL1));
+   // float b = (ADC1::DR::DATA::GET())*(3.3/4096);
+float a = ((b-0.76)/0.0025) + 25;
+   // Once the conversion of the selected regular channel is complete,
+   // the converted data are stored into the 16-bit ADC_DR register.
+    std::cout << a << std::endl;
+}
+return 0;
+}
+----
++
+. Выходные значения датчика:
++
+image::../../../../Users/User/Desktop/-2-2021-main/1.png[]
++
+image::../../../../Users/User/Desktop/-2-2021-main/2.png[]
+
+
+
+
